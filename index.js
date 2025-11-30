@@ -11,19 +11,34 @@ async function sortHackerNewsArticles() {
   // go to Hacker News
   await page.goto("https://news.ycombinator.com/newest");
 
-  console.log("Getting...");
-  await getPagePosts(page);
-  console.log("Got");
+  console.log("Getting page 1...");
+  await getPagePosts(page, true);
+  await nextPage(page);
+
+  console.log("Getting page 2...");
+  await getPagePosts(page, true);
+  await nextPage(page);
+
+  console.log("Getting page 3...");
+  await getPagePosts(page, true);
+  await nextPage(page);
+
+  console.log("Getting page 4...");
+  await getPagePosts(page, false);
 
   // await browser.close();
 }
 
-async function getPagePosts(page) {
+async function getPagePosts(page, all) {
   try {
     const table = page.locator("tr#bigbox table");
 
     const titleRows = await table.locator("tr.athing").all();
+
+    let index = 0;
     for (const row of titleRows) {
+      if (index > 9 && all !== true) return;
+
       const title = await row
         .locator("span.titleline a[rel='nofollow']")
         .textContent();
@@ -33,10 +48,17 @@ async function getPagePosts(page) {
 
       console.log(title);
       console.log(subtext);
+      index++;
     }
   } catch (e) {
     console.error(`Failed to get posts: \n${e}`);
   }
+}
+
+async function nextPage(page) {
+  const pageLink = page.locator("a.morelink");
+  console.log(await pageLink.getAttribute("href"));
+  await page.goto(await pageLink.getAttribute("href"));
 }
 
 (async () => {
