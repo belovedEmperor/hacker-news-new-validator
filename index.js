@@ -14,17 +14,21 @@ async function sortHackerNewsArticles() {
   console.log("Getting page 1...");
   await getPagePosts(page, true);
   await nextPage(page);
+  await page.getByText("31").waitFor();
 
   console.log("Getting page 2...");
   await getPagePosts(page, true);
   await nextPage(page);
+  await page.getByText("61").waitFor();
 
   console.log("Getting page 3...");
   await getPagePosts(page, true);
   await nextPage(page);
+  await page.getByText("91").waitFor();
 
   console.log("Getting page 4...");
   await getPagePosts(page, false);
+  await page.getByText("121").waitFor();
 
   // await browser.close();
 }
@@ -39,9 +43,7 @@ async function getPagePosts(page, all) {
     for (const row of titleRows) {
       if (index > 9 && all !== true) return;
 
-      const title = await row
-        .locator("span.titleline a[rel='nofollow']")
-        .textContent();
+      const title = await row.locator("span.titleline").first().textContent();
 
       const subtextRow = row.locator("xpath=./following-sibling::tr[1]");
       const subtext = await subtextRow.locator("td.subtext").textContent();
@@ -58,7 +60,9 @@ async function getPagePosts(page, all) {
 async function nextPage(page) {
   const pageLink = page.locator("a.morelink");
   console.log(await pageLink.getAttribute("href"));
-  await page.goto(await pageLink.getAttribute("href"));
+  await page.goto(
+    "https://news.ycombinator.com/" + (await pageLink.getAttribute("href")),
+  );
 }
 
 (async () => {
