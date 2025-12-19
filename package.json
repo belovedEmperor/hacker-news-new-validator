@@ -8,6 +8,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "chrono-node": "^2.9.0",
     "playwright": "^1.39.0"
   },
   "devDependencies": {
