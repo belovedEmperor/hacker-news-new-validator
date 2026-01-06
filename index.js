@@ -13,20 +13,19 @@ async function sortHackerNewsArticles() {
 
   const page1 = await context.newPage();
   await page1.goto(`${hackerNewsLink}/newest`);
-  console.log("\n\nGetting page 1");
+  console.log("Getting page 1");
   const ages1 = await getPagePosts(page1, true, constTime);
 
   const link = await getNextPageLink(page1);
   const time = String(link.match(new RegExp("next=\\d+&")))
     .split("=")[1]
     .split("&")[0];
-  console.log(`\n\n\n\n${time}\n\n\n\n`);
   await page1.close();
 
   let ages2, ages3, ages4;
 
   const item1 = async () => {
-    console.log("\n\nGetting page 2");
+    console.log("Getting page 2");
     const page2 = await context.newPage();
     await page2.goto(`${hackerNewsLink}/newest?next=${time}&n=31`);
     await page2.locator("span.rank").getByText("31").waitFor();
@@ -35,7 +34,7 @@ async function sortHackerNewsArticles() {
   };
 
   const item2 = async () => {
-    console.log("\n\nGetting page 3");
+    console.log("Getting page 3");
     const page3 = await context.newPage();
     await page3.goto(`${hackerNewsLink}/newest?next=${time}&n=61`);
     await page3.locator("span.rank").getByText("61").waitFor();
@@ -44,7 +43,7 @@ async function sortHackerNewsArticles() {
   };
 
   const item3 = async () => {
-    console.log("\n\nGetting page 4");
+    console.log("Getting page 4");
     const page4 = await context.newPage();
     await page4.goto(`${hackerNewsLink}/newest?next=${time}&n=91`);
     await page4.locator("span.rank").getByText("91").waitFor();
@@ -55,6 +54,10 @@ async function sortHackerNewsArticles() {
   await Promise.all([item1(), item2(), item3()]);
 
   const ages = [...ages1, ...ages2, ...ages3, ...ages4];
+  ages.length !== 100
+    ? console.error(`Error: Not exactly 100 arcticles, found ${ages.length}`)
+    : console.log("Found 100 articles");
+
   const invalids = await validateDates(ages);
   if (invalids.length !== 0) {
     console.log("These errors posts are invalid:");
