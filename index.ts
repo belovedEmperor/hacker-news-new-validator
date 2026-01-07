@@ -1,14 +1,14 @@
 // EDIT THIS FILE TO COMPLETE ASSIGNMENT QUESTION 1
-import { chromium, Browser, BrowserContext, Page } from "playwright";
+import { chromium, Browser, BrowserContext, Page, Locator } from "playwright";
 import { Chrono } from "chrono-node";
+import { title } from "process";
 
-interface Article {
-  id: string;
-  rank: number;
+interface Post {
+  rowNumber: number;
+  title: string;
   timestamp: Date;
   ageText: string;
   pageNumber: number;
-  rowNumber: number;
 }
 
 class HackerNewsValidator {
@@ -27,14 +27,20 @@ class HackerNewsValidator {
   async validate() {
     await this.init();
 
-    let page1, page2, page3, page4: Page;
-    let ages1, ages2, ages3, ages4: string;
+    let page1,
+      page2,
+      page3,
+      page4: Page | null = null;
+    let posts1,
+      posts2,
+      posts3,
+      posts4: Post[] | null = null;
 
     page1 = await this.context?.newPage();
     if (page1) {
       await page1.goto(`${this.hackerNewsLink}/newest`);
       console.log("Getting page 1");
-      ages1 = await this.getPagePosts(page1, true, this.constTime);
+      posts1 = await this.getPagePosts(page1, true, 1);
     } else {
       throw new Error("Failed to get page1");
     }
@@ -50,28 +56,66 @@ class HackerNewsValidator {
     let item1, item2, item3;
     item1 = async () => {
       console.log("Getting page 2");
-      [page2, ages2] = await this.initializeItems("31", pageTime);
+      posts2 = await this.initializeItems("31", pageTime);
     };
-  }
+    item2 = async () => {
+      console.log("Getting page 3");
+      posts3 = await this.initializeItems("61", pageTime);
+    };
+    item3 = async () => {
+      console.log("Getting page 4");
+      posts4 = await this.initializeItems("91", pageTime);
+    };
 
-  async initializeItems(
-    startingPost: string,
-    time: string,
-  ): Promise<Page, Date[]> {
-    const page = await this.context?.newPage();
-    if (page) {
-      await page.goto(`${this.hackerNewsLink}/newest?next=${time}&n=31`);
-      await page.locator("span.rank").getByText("31").waitFor();
-      return {
-        // Should use the interface instead
-        page: page,
-        ages: await this.getPagePosts(page, true, this.constTime),
-      };
+    await Promise.all([item1(), item2(), item3()]);
+
+    let posts: Post[] | null = null;
+
+    if (posts1 && posts2 && posts3 && posts4) {
+      posts = [...posts1, ...posts2, ...posts3, ...posts4];
+
+      posts.length !== 100
+        ? console.error(
+            `Error: Not exactly 100 arcticles, found ${posts.length}`,
+          )
+        : console.log("Found 100 articles");
+
+      const invalids = await validateDates(age);
     }
   }
 
-  async getPagePosts(page: Page, all: boolean, referenceTime: Date) {
-    const ages: Date[] = [];
+  async initializeItems(startingPost: string, time: string): Promise<Post[]> {
+    try {
+      const page = await this.context?.newPage();
+      let pageNumber = -1;
+      switch (startingPost) {
+        case "31":
+          pageNumber = 2;
+        case "61":
+          pageNumber = 3;
+        case "91":
+          pageNumber = 4;
+      }
+      if (page) {
+        await page.goto(
+          `${this.hackerNewsLink}/newest?next=${time}&n=${startingPost}`,
+        );
+        await page.locator("span.rank").getByText(startingPost).waitFor();
+        const all = pageNumber !== 4 ? true : false;
+        return await this.getPagePosts(page, all, pageNumber);
+      }
+    } catch (e) {
+      console.error(`Failed to initialize items:${e}`);
+    }
+    return [];
+  }
+
+  async getPagePosts(
+    page: Page,
+    all: boolean,
+    pageNumber: number,
+  ): Promise<Post[]> {
+    const posts: Post[] = [];
     const table = page.locator("tr#bigbox table");
 
     try {
@@ -79,20 +123,11 @@ class HackerNewsValidator {
 
       let index = 0;
       for (const row of titleRows) {
-        if (index > 9 && all !== true) return ages;
+        if (index > 9 && all !== true) return posts;
 
-        const subtextRow = row.locator("xpath=./following-sibling::tr[1]");
-        const ageText = await subtextRow
-          .locator("span.age")
-          .locator("a")
-          .textContent();
-
-        if (ageText) {
-          const age = this.chrono.parseDate(ageText, referenceTime);
-          if (age) {
-            ages.push(age);
-          }
-        }
+        const post = await this.processRow(row, pageNumber);
+        posts.push(post);
+        console.log(post);
 
         index++;
       }
@@ -100,7 +135,48 @@ class HackerNewsValidator {
       console.error(`Failed to get posts:\n${e}`);
     }
 
-    return ages;
+    return posts;
+  }
+
+  async processRow(row: Locator, pageNumber: number): Promise<Post> {
+    let age: Date | null = null;
+
+    const subtextRow = row.locator("xpath=./following-sibling::tr[1]");
+
+    try {
+      const titleTextContent = await row.textContent();
+      const titleMatch = titleTextContent?.match(/^(\d+)\.(.*)/);
+      const rowNumber = parseInt(titleMatch?.[1] ?? "-1");
+      const title = titleMatch?.[2] ?? "";
+      const ageText = await subtextRow
+        .locator("span.age")
+        .locator("a")
+        .textContent();
+
+      if (ageText) {
+        age = this.chrono.parseDate(ageText, this.constTime);
+      }
+      if (!age || !ageText) {
+        throw new Error("Failed to get age");
+      }
+
+      return {
+        rowNumber: rowNumber,
+        title: title,
+        timestamp: age,
+        ageText: ageText,
+        pageNumber: pageNumber,
+      };
+    } catch (e) {
+      console.log(`Failed to process row:\n${e}`);
+    }
+    return {
+      rowNumber: 0,
+      title: "",
+      timestamp: this.constTime,
+      ageText: "",
+      pageNumber: 0,
+    };
   }
 
   async getNextPageLink(page: Page): Promise<string> {
