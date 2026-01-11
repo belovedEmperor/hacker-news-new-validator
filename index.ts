@@ -34,7 +34,7 @@ class HackerNewsValidator {
     const page1 = await this.context?.newPage();
     if (page1) {
       await page1.goto(`${this.hackerNewsLink}/newest`);
-      console.log("Getting page 1");
+      // console.log("Getting page 1");
       posts1 = await this.getPagePosts(page1, true, 1);
     } else {
       throw new Error("Failed to get page1");
@@ -50,15 +50,15 @@ class HackerNewsValidator {
 
     let item1, item2, item3;
     item1 = async () => {
-      console.log("Getting page 2");
+      // console.log("Getting page 2");
       posts2 = await this.initializeItems("31", pageTime);
     };
     item2 = async () => {
-      console.log("Getting page 3");
+      // console.log("Getting page 3");
       posts3 = await this.initializeItems("61", pageTime);
     };
     item3 = async () => {
-      console.log("Getting page 4");
+      // console.log("Getting page 4");
       posts4 = await this.initializeItems("91", pageTime);
     };
 
@@ -77,7 +77,7 @@ class HackerNewsValidator {
 
       const invalids = await this.validateDates(posts);
       if (invalids.length !== 0) {
-        console.log("These pairs of posts are invalid:");
+        console.log("\nThese pairs of posts are invalid:");
         console.log("| Post # | Title | Timestamp | Relative Age | Page # |");
         for (const [id1, id2] of invalids) {
           const p1 = posts[id1];
@@ -158,7 +158,7 @@ class HackerNewsValidator {
 
         const post = await this.processRow(row, pageNumber);
         posts.push(post);
-        console.log(post);
+        // console.log(post);
 
         index++;
       }
