@@ -1,7 +1,6 @@
 // EDIT THIS FILE TO COMPLETE ASSIGNMENT QUESTION 1
 import { chromium, Browser, BrowserContext, Page, Locator } from "playwright";
 import { Chrono } from "chrono-node";
-import { title } from "process";
 
 interface Post {
   rowNumber: number;
@@ -27,16 +26,12 @@ class HackerNewsValidator {
   async validate() {
     await this.init();
 
-    let page1,
-      page2,
-      page3,
-      page4: Page | null = null;
     let posts1,
       posts2,
       posts3,
       posts4: Post[] | null = null;
 
-    page1 = await this.context?.newPage();
+    const page1 = await this.context?.newPage();
     if (page1) {
       await page1.goto(`${this.hackerNewsLink}/newest`);
       console.log("Getting page 1");
@@ -80,8 +75,39 @@ class HackerNewsValidator {
           )
         : console.log("Found 100 articles");
 
-      const invalids = await validateDates(age);
+      const invalids = await this.validateDates(posts);
+      if (invalids.length !== 0) {
+        console.log("These pairs of posts are invalid:");
+        console.log("| Post # | Title | Timestamp | Relative Age | Page # |");
+        for (const [id1, id2] of invalids) {
+          const p1 = posts[id1];
+          const p2 = posts[id2];
+          console.log(
+            `| ${p1.rowNumber} | ${p1.title.trim()} | ${p1.timestamp.toISOString()} | ${p1.ageText} | ${p1.pageNumber} |`,
+          );
+          console.log(
+            `| ${p2.rowNumber} | ${p2.title.trim()} | ${p2.timestamp.toISOString()} | ${p2.ageText} | ${p2.pageNumber} |`,
+          );
+          console.log("|--------|-------|-----------|--------------|--------|");
+        }
+      } else {
+        console.log("All dates are valid");
+      }
     }
+
+    this.context?.close();
+    this.browser?.close();
+  }
+
+  async validateDates(posts: Post[]) {
+    let invalids = [];
+
+    for (let i = 0; i < posts.length - 1; i++) {
+      if (posts[i].timestamp < posts[i + 1].timestamp) {
+        invalids.push([i, i + 1]);
+      }
+    }
+    return invalids;
   }
 
   async initializeItems(startingPost: string, time: string): Promise<Post[]> {
@@ -91,10 +117,15 @@ class HackerNewsValidator {
       switch (startingPost) {
         case "31":
           pageNumber = 2;
+          break;
         case "61":
           pageNumber = 3;
+          break;
         case "91":
           pageNumber = 4;
+          break;
+        default:
+          throw new Error("startingPost not valid");
       }
       if (page) {
         await page.goto(
