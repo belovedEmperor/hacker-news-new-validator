@@ -53,49 +53,36 @@ class HackerNewsValidator {
   async validate() {
     await this.init();
 
-    let posts1,
-      posts2,
-      posts3,
-      posts4: Post[] | null = null;
+    let posts: Post[] | null = null;
 
     const page = await this.context?.newPage();
-    if (page) {
-      await page.goto(`${this.hackerNewsLink}/newest`);
-      // console.log("Getting page 1");
-      posts1 = await this.withRetry(() => this.getPagePosts(page, true, 1));
-    } else {
+    if (!page) {
       throw new Error("Failed to get page1");
     }
 
-    const link = await this.withRetry(() => this.getNextPageLink(page));
-    if (link === "") {
-      throw new Error("Got empty link");
-    }
-    const pageTime = String(link.match(new RegExp("next=\\d+&")))
-      .split("=")[1]
-      .split("&")[0];
+    await page.goto(`${this.hackerNewsLink}/newest`);
 
-    let item1, item2, item3;
-    item1 = async () => {
-      // console.log("Getting page 2");
-      posts2 = await this.withRetry(() => this.initializeItems("31", pageTime));
-    };
-    item2 = async () => {
-      // console.log("Getting page 3");
-      posts3 = await this.withRetry(() => this.initializeItems("61", pageTime));
-    };
-    item3 = async () => {
-      // console.log("Getting page 4");
-      posts4 = await this.withRetry(() => this.initializeItems("91", pageTime));
-    };
+    posts = await this.withRetry(() => this.getPagePosts(page, true, 1));
 
-    await Promise.all([item1(), item2(), item3()]);
+    await this.withRetry(() => this.goToNextPage(page));
+    posts = [
+      ...posts,
+      ...(await this.withRetry(() => this.getPagePosts(page, true, 2))),
+    ];
 
-    let posts: Post[] | null = null;
+    await this.withRetry(() => this.goToNextPage(page));
+    posts = [
+      ...posts,
+      ...(await this.withRetry(() => this.getPagePosts(page, true, 3))),
+    ];
 
-    if (posts1 && posts2 && posts3 && posts4) {
-      posts = [...posts1, ...posts2, ...posts3, ...posts4];
+    await this.withRetry(() => this.goToNextPage(page));
+    posts = [
+      ...posts,
+      ...(await this.withRetry(() => this.getPagePosts(page, false, 4))),
+    ];
 
+    if (posts) {
       posts.length !== 100
         ? console.error(
             `Error: Not exactly 100 arcticles, found ${posts.length}`,
@@ -135,43 +122,6 @@ class HackerNewsValidator {
       }
     }
     return invalids;
-  }
-
-  private async initializeItems(
-    startingPost: string,
-    time: string,
-  ): Promise<Post[]> {
-    try {
-      const page = await this.context?.newPage();
-      let pageNumber = -1;
-      switch (startingPost) {
-        case "31":
-          pageNumber = 2;
-          break;
-        case "61":
-          pageNumber = 3;
-          break;
-        case "91":
-          pageNumber = 4;
-          break;
-        default:
-          throw new Error("startingPost not valid");
-      }
-      if (page) {
-        await page.goto(
-          `${this.hackerNewsLink}/newest?next=${time}&n=${startingPost}`,
-        );
-        await page.locator("span.rank").getByText(startingPost).waitFor();
-        const getAllPosts = pageNumber !== 4 ? true : false;
-        return await this.withRetry(() =>
-          this.getPagePosts(page, getAllPosts, pageNumber),
-        );
-      }
-    } catch (e) {
-      this.assertIsError(e);
-      console.error(`Failed to initialize items:${e}`);
-    }
-    throw new Error("Failed to initialize items");
   }
 
   private async getPagePosts(
@@ -242,17 +192,14 @@ class HackerNewsValidator {
     throw new Error("Failed to process row");
   }
 
-  private async getNextPageLink(page: Page): Promise<string> {
+  private async goToNextPage(page: Page) {
     try {
-      return (
-        (await page.locator("a.morelink[rel='next']").getAttribute("href")) ||
-        ""
-      );
+      await page.locator("a.morelink[rel='next']").click();
+      await page.waitForLoadState("networkidle");
     } catch (e) {
       this.assertIsError(e);
-      console.error(`Failed to get next page link:\n${e}`);
+      console.error(`Failed to go to next page:\n${e}`);
     }
-    throw new Error("Failed to get new page link");
   }
 }
 
