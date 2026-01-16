@@ -18,7 +18,34 @@ class HackerNewsValidator {
   private readonly hackerNewsLink = "https://news.ycombinator.com";
   private readonly constTime = new Date();
 
-  async init() {
+  private assertIsError(e: unknown): asserts e is Error {
+    if (!(e instanceof Error)) throw new Error("e is not an Error");
+  }
+
+  private async withRetry<T>(
+    func: () => Promise<T>,
+    maxAttempts: number = 3,
+    delayMs: number = 1000,
+  ): Promise<T> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await func();
+      } catch (e) {
+        this.assertIsError(e);
+        lastError = e;
+        if (attempt < maxAttempts) {
+          console.log(`Attempt ${attempt}/${maxAttempts} failed, retrying...`);
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+      }
+    }
+
+    throw lastError;
+  }
+
+  private async init() {
     this.browser = await chromium.launch({ headless: false });
     this.context = await this.browser?.newContext();
   }
@@ -31,16 +58,16 @@ class HackerNewsValidator {
       posts3,
       posts4: Post[] | null = null;
 
-    const page1 = await this.context?.newPage();
-    if (page1) {
-      await page1.goto(`${this.hackerNewsLink}/newest`);
+    const page = await this.context?.newPage();
+    if (page) {
+      await page.goto(`${this.hackerNewsLink}/newest`);
       // console.log("Getting page 1");
-      posts1 = await this.getPagePosts(page1, true, 1);
+      posts1 = await this.withRetry(() => this.getPagePosts(page, true, 1));
     } else {
       throw new Error("Failed to get page1");
     }
 
-    const link = await this.getNextPageLink(page1);
+    const link = await this.withRetry(() => this.getNextPageLink(page));
     if (link === "") {
       throw new Error("Got empty link");
     }
@@ -51,15 +78,15 @@ class HackerNewsValidator {
     let item1, item2, item3;
     item1 = async () => {
       // console.log("Getting page 2");
-      posts2 = await this.initializeItems("31", pageTime);
+      posts2 = await this.withRetry(() => this.initializeItems("31", pageTime));
     };
     item2 = async () => {
       // console.log("Getting page 3");
-      posts3 = await this.initializeItems("61", pageTime);
+      posts3 = await this.withRetry(() => this.initializeItems("61", pageTime));
     };
     item3 = async () => {
       // console.log("Getting page 4");
-      posts4 = await this.initializeItems("91", pageTime);
+      posts4 = await this.withRetry(() => this.initializeItems("91", pageTime));
     };
 
     await Promise.all([item1(), item2(), item3()]);
@@ -99,7 +126,7 @@ class HackerNewsValidator {
     this.browser?.close();
   }
 
-  async validateDates(posts: Post[]) {
+  private async validateDates(posts: Post[]) {
     let invalids = [];
 
     for (let i = 0; i < posts.length - 1; i++) {
@@ -110,7 +137,10 @@ class HackerNewsValidator {
     return invalids;
   }
 
-  async initializeItems(startingPost: string, time: string): Promise<Post[]> {
+  private async initializeItems(
+    startingPost: string,
+    time: string,
+  ): Promise<Post[]> {
     try {
       const page = await this.context?.newPage();
       let pageNumber = -1;
@@ -132,16 +162,19 @@ class HackerNewsValidator {
           `${this.hackerNewsLink}/newest?next=${time}&n=${startingPost}`,
         );
         await page.locator("span.rank").getByText(startingPost).waitFor();
-        const all = pageNumber !== 4 ? true : false;
-        return await this.getPagePosts(page, all, pageNumber);
+        const getAllPosts = pageNumber !== 4 ? true : false;
+        return await this.withRetry(() =>
+          this.getPagePosts(page, getAllPosts, pageNumber),
+        );
       }
     } catch (e) {
+      this.assertIsError(e);
       console.error(`Failed to initialize items:${e}`);
     }
-    return [];
+    throw new Error("Failed to initialize items");
   }
 
-  async getPagePosts(
+  private async getPagePosts(
     page: Page,
     all: boolean,
     pageNumber: number,
@@ -154,22 +187,26 @@ class HackerNewsValidator {
 
       let index = 0;
       for (const row of titleRows) {
+        // If 4th page, then only get 10 posts
         if (index > 9 && all !== true) return posts;
 
-        const post = await this.processRow(row, pageNumber);
+        const post = await this.withRetry(() =>
+          this.processRow(row, pageNumber),
+        );
         posts.push(post);
         // console.log(post);
 
         index++;
       }
     } catch (e) {
+      this.assertIsError(e);
       console.error(`Failed to get posts:\n${e}`);
     }
 
     return posts;
   }
 
-  async processRow(row: Locator, pageNumber: number): Promise<Post> {
+  private async processRow(row: Locator, pageNumber: number): Promise<Post> {
     let age: Date | null = null;
 
     const subtextRow = row.locator("xpath=./following-sibling::tr[1]");
@@ -199,27 +236,23 @@ class HackerNewsValidator {
         pageNumber: pageNumber,
       };
     } catch (e) {
+      this.assertIsError(e);
       console.log(`Failed to process row:\n${e}`);
     }
-    return {
-      rowNumber: 0,
-      title: "",
-      timestamp: this.constTime,
-      ageText: "",
-      pageNumber: 0,
-    };
+    throw new Error("Failed to process row");
   }
 
-  async getNextPageLink(page: Page): Promise<string> {
+  private async getNextPageLink(page: Page): Promise<string> {
     try {
       return (
         (await page.locator("a.morelink[rel='next']").getAttribute("href")) ||
         ""
       );
     } catch (e) {
+      this.assertIsError(e);
       console.error(`Failed to get next page link:\n${e}`);
     }
-    return "";
+    throw new Error("Failed to get new page link");
   }
 }
 
